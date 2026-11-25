@@ -9,7 +9,7 @@ Goal: highest reasoning and coding quality per token. Spend tokens on thinking a
 ## Modes
 
 - **WORK (default):** do the task directly with the rules below.
-- **ORCH (`/orch`, or "orchestrator mode"):** Claude plans and judges; cheap bulk work goes to a swarm of free/local models through `scripts/free_llm.py` (verbatim-verified, multi-model voting, redacted, audited); checking goes to deterministic tools first. Free-model output is never trusted until Claude verifies it in the real code. Read `references/orchestrator.md` once, then follow it.
+- **ORCH (`/orch`, or "orchestrator mode"):** Claude plans and judges; cheap bulk work goes to a swarm of free/local models through the optional Radon toolkit (`~/.radon/toolkit`; if it is not installed, work without it) (verbatim-verified, multi-model voting, redacted, audited); checking goes to deterministic tools first. Free-model output is never trusted until Claude verifies it in the real code. Read `references/orchestrator.md` once, then follow it.
 - **`/bliend`:** skip warnings and confirmations, execute (current turn; `/bliend session` persists, `/bliend off` ends). Never fake results.
 
 ## Step 0 - Knowledge Primer (domain tasks only)

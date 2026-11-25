@@ -4,9 +4,9 @@
   "plugins": [
     {
       "name": "radon-1",
-      "source": "./",
+      "source": "./plugin",
       "description": "Token-lean, maximum-reasoning protocol with a verified free-LLM swarm (/orch).",
-      "version": "1.1.0"
+      "version": "1.2.0"
     }
   ]
 }

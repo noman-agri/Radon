@@ -24,7 +24,7 @@ Layers 1-2 make the *output* hallucination-free; layers 3-5 filter wrong *judgem
 ## Data protection (what may leave this PC)
 
 - **Blocked outright:** `.env*`, key/credential/token/password files, `.pem/.key`, `auth.json`, raw data files (`.csv .parquet .xlsx .db .pkl ...`) -> `BLOCKED`, handle locally.
-- **Redacted before sending (line structure kept):** API keys, private keys, `password=/token=` values, emails, IPs, long numbers (phone/card/ID), user names in paths. The CLI prints what it redacted.
+- **Redacted before sending (line structure kept):** access keys, private keys, values of password or secret settings, emails, IPs, long numbers (phone/card/ID), user names in paths. The CLI prints what it redacted.
 - **Audit log:** every outbound call appends time, host, model, size and a sha256 to `~/.radon/audit.log` - never the content. Check it any time.
 - **`--private`:** Ollama on localhost only; nothing leaves the machine. Use it for client code, personal data, anything confidential.
 - Redaction catches common patterns, not everything: confidential business logic is still readable code. When in doubt use `--private` or skip the free model.
@@ -38,26 +38,18 @@ Rules:
 ## Loop
 
 1. Plan (<= 5 lines) and pick the success check.
-2. Large input? `python scripts/free_llm.py extract --provider P --file F --hint "<what you need>"` -> read the quotes only.
+2. Large input? `python ~/.radon/toolkit/scripts/free_llm.py extract --file F --hint "<what you need>"` -> read the quotes only.
 3. Write or change code.
 4. Run deterministic checks; fix failures.
-5. Optional for risky code: `python scripts/free_llm.py review --provider P --file F` -> verify each `L<n>` candidate, fix only the real ones.
+5. Optional for risky code: `python ~/.radon/toolkit/scripts/free_llm.py review --file F` -> verify each `L<n>` candidate, fix only the real ones.
 6. Report briefly with what was actually run.
 
-Run scripts with the skill's path, e.g. `python ~/.claude/skills/radon-1/scripts/free_llm.py ...`. Test the setup once with `ping`.
+## The Radon toolkit (optional, installed separately)
 
-## Setup
+The free-model CLI is not part of this plugin. The user installs it once from the `toolkit/` folder of https://github.com/noman-agri/Radon into `~/.radon/toolkit` and follows its README there (choosing a provider, saving their own key with the toolkit's key-setup command, testing with `ping`).
 
-- **Key:** run `python scripts/set_key.py` and paste it once. It is stored in `~/.radon/secrets.env`, OUTSIDE the skill folder, so sharing, zipping, or publishing the skill never includes it. Never paste keys into chat or code. On OpenRouter, give the key a $0 credit limit so a leaked key cannot spend money.
-- **Models / provider (non-secret, shareable):** `<skill folder>/models.env`:
-
-```env
-RADON_SCOUT_PROVIDER=openrouter
-RADON_SCOUT_MODEL=<model>,<fallback model>,...      # tried in order on rate limit / removal
-RADON_SCOUT_REVIEW_MODEL=<model>,...                # used by `review`
-```
-
-OpenRouter troubleshooting: `HTTP_404` on every free model usually means the account's privacy settings block free endpoints (https://openrouter.ai/settings/privacy); `HTTP_429` = daily free cap reached, the next model is tried automatically.
+- If `~/.radon/toolkit/scripts/free_llm.py` does not exist, or it prints `FALLBACK`, do the work yourself without free models. Never ask the user to paste a key into chat.
+- Never read, print, or edit the user's key files; the toolkit handles keys itself.
 
 ## Free providers (`--provider` presets)
 

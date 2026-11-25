@@ -2,11 +2,7 @@
 
 Load this reference when deploying the Zero-Trust Free Scout pre-processor, local Stage-0 zero-token gating, medium-to-max API effort cascading, or controlled A/B token and accuracy benchmarking.
 
-All code lives in `scripts/` (Python 3.9+, stdlib only). Run or import it; do not paste it into prompts. Verify any change with:
-
-```bash
-python -m unittest discover -s tests -v   # from the skill root; offline, no API calls
-```
+All code lives in the optional Radon toolkit (`~/.radon/toolkit/scripts/`, Python 3.9+, stdlib only), installed separately from the `toolkit/` folder of https://github.com/noman-agri/Radon. Run or import it; do not paste it into prompts. If it is not installed, use this page as a design reference only.
 
 ## 1. Controlled A/B Benchmark Protocol
 
@@ -16,7 +12,7 @@ python -m unittest discover -s tests -v   # from the skill root; offline, no API
 4. **Fair Cost Delta:** Compute aggregate cost savings ONLY across tests where BOTH Baseline and Charter passed accuracy; report pass rates and accuracy regressions separately.
 5. **Use real usage logs:** `suite` mode with API `usage` numbers is the source of truth. `text` mode is an estimate only (tiktoken / heuristic tokenizer, not Claude's; no hidden thinking tokens).
 
-## 2. Zero-Trust Free Scout (`scripts/free_scout_gate.py`)
+## 2. Zero-Trust Free Scout (`free_scout_gate.py`)
 
 Free-tier 7B-8B models hallucinate on open-ended tasks, so the Scout is caged to **extractive-only JSON** and every output is verified locally:
 
@@ -30,15 +26,7 @@ Free-tier 7B-8B models hallucinate on open-ended tasks, so the Scout is caged to
 | Network / provider errors | `SCOUT_FALLBACK_HTTP_<code>` or `SCOUT_FALLBACK_ERROR: <Type>`; never raises |
 | Empty extraction | `build_main_context()` returns the full raw document (`SCOUT_EMPTY_EXTRACTION_FALLBACK`) |
 
-Setup via OS environment or a local `.env` (OS environment wins; `.env` must be in `.gitignore`):
-
-```env
-RADON_SCOUT_BASE_URL=https://<openai-compatible-provider>/v1
-RADON_SCOUT_MODEL=<provider model id, e.g. an 8B instruct model>
-RADON_SCOUT_API_KEY=<YOUR_FREE_PROVIDER_TOKEN>
-```
-
-Check the provider's current base URL and model id in its docs before use (e.g. GitHub Models has moved endpoints over time). Free tiers may log or train on prompts: secret scanning does not catch personal or confidential data, so do not send such documents.
+Provider and key setup are done by the user with the toolkit's own README (keys never go in chat, code, or this plugin). Check the provider's current base URL and model id in its docs before use (e.g. GitHub Models has moved endpoints over time). Free tiers may log or train on prompts: secret scanning does not catch personal or confidential data, so do not send such documents.
 
 Tier 1 -> Tier 2 glue (always use this, never index the raw result yourself):
 
@@ -47,7 +35,7 @@ from free_scout_gate import build_main_context
 context_for_main, scout_status = build_main_context(raw_doc, task_hint="extract error causes")
 ```
 
-## 3. Effort Cascade Router (`scripts/effort_cascade_router.py`)
+## 3. Effort Cascade Router (`effort_cascade_router.py`)
 
 Flow: **Stage-0 local gate -> exact cache -> `medium` pass -> verifier -> at most one `xhigh` escalation.**
 
@@ -73,12 +61,12 @@ Cache economics to respect when wiring `llm_call_fn` (Claude):
 - `DEFAULT_STATIC_PREFIX` is ~400 tokens, **below every model's minimum cacheable prefix (512-4096)**. Put it together with other stable content (tool schemas, repo map) above that minimum, mark it with `cache_control`, and confirm `usage.cache_read_input_tokens > 0`.
 - The escalation changes `effort`, which invalidates the messages cache for that call.
 
-## 4. Weighted A/B Cost Comparator (`scripts/ab_token_compare.py`)
+## 4. Weighted A/B Cost Comparator (`ab_token_compare.py`)
 
 ```bash
-python scripts/ab_token_compare.py init-template --out ab_results.json   # refuses to overwrite without --force
-python scripts/ab_token_compare.py suite --input ab_results.json
-python scripts/ab_token_compare.py text --base-in a_in.txt --base-out a_out.txt --treat-in b_in.txt --treat-out b_out.txt
+python ~/.radon/toolkit/scripts/ab_token_compare.py init-template --out ab_results.json   # refuses to overwrite without --force
+python ~/.radon/toolkit/scripts/ab_token_compare.py suite --input ab_results.json
+python ~/.radon/toolkit/scripts/ab_token_compare.py text --base-in a_in.txt --base-out a_out.txt --treat-in b_in.txt --treat-out b_out.txt
 ```
 
 - Default weights follow Claude list pricing relative to 1 uncached input token: output/thinking `5.0`, cache write `1.25` (5-min TTL; use `2.0` for 1-hour), cache read `0.10`. Override for your model (`--cache-read-weight 0.05` on Opus 5.5 / Sonnet 5.5, `0.025` on Fable 5.x).
