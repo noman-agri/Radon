@@ -202,9 +202,10 @@ def run_free_scout(
     return verify_extractive_json(content, source_text, cfg.max_compression_ratio)
 
 
-def call_chat(cfg: ScoutConfig, system_prompt: str, user_content: str) -> tuple[str | None, str]:
+def call_chat(cfg: ScoutConfig, system_prompt: str, user_content: "str | list") -> tuple[str | None, str]:
     """One OpenAI-compatible chat call at temperature=0. Returns (content, "OK") or (None, reason). Never raises."""
-    if contains_secret(user_content):
+    texts = [user_content] if isinstance(user_content, str) else [p.get("text", "") for p in user_content if isinstance(p, dict)]
+    if any(contains_secret(t) for t in texts):
         return None, "SCOUT_BLOCKED_SECRET_DETECTED"
     if not _endpoint_is_safe(cfg.base_url):
         return None, "SCOUT_BLOCKED_INSECURE_ENDPOINT"

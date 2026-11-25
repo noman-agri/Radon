@@ -46,7 +46,36 @@ PRESETS = {
     "nvidia": "https://integrate.api.nvidia.com/v1",
     "hf": "https://router.huggingface.co/v1",
     "ollama": "http://localhost:11434/v1",
+    "xai": "https://api.x.ai/v1",
 }
+
+# Trust tiers. Trusted providers may see real code/documents/images (after secret redaction);
+# every other provider only ever sees MASKED code and never documents or images.
+# Override with RADON_TRUSTED_PROVIDERS in models.env (comma list). Localhost is always trusted.
+DEFAULT_TRUSTED = "gemini,ollama"
+
+
+def trusted_providers() -> set[str]:
+    vals = {**_read_dotenv(SKILL_MODELS)}
+    raw = os.environ.get("RADON_TRUSTED_PROVIDERS") or vals.get("RADON_TRUSTED_PROVIDERS") or DEFAULT_TRUSTED
+    return {p.strip().lower() for p in raw.split(",") if p.strip()}
+
+
+def is_trusted(cfg: ScoutConfig) -> bool:
+    if "localhost" in cfg.base_url or "127.0.0.1" in cfg.base_url:
+        return True
+    trusted = trusted_providers()
+    return any(cfg.base_url.startswith(PRESETS[p]) for p in trusted if p in PRESETS)
+
+
+IMAGE_PROMPT = (
+    "Describe this image for an engineer who cannot see it. 1) Transcribe ALL visible text verbatim, "
+    "keeping layout (tables as Markdown). 2) List charts with axis labels and every readable value. "
+    "3) Describe UI elements / diagram boxes and arrows. Mark anything unreadable as [?]. "
+    "Do not guess or add facts that are not visible."
+)
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+               ".gif": "image/gif"}
 
 REVIEW_PROMPT = (
     "You are a strict code reviewer. Report only concrete bugs (wrong logic, crashes, data leakage, "
@@ -233,7 +262,40 @@ def swarm_vote(per_model: list[list[tuple[int, str, str]]], min_votes: int) -> l
     return sorted((ln, len(v), v[0][0], v[0][1]) for ln, v in votes.items() if len(v) >= min_votes)
 
 
-def cmd_review(cfgs: list[ScoutConfig] | ScoutConfig, text: str, swarm: int = 3) -> int:
+def cmd_describe(cfgs: list[ScoutConfig], path: Path) -> int:
+    """Image -> text via a TRUSTED vision model, so Claude reads a short description instead of image tokens."""
+    import base64
+    mime = IMAGE_TYPES.get(path.suffix.lower())
+    if not mime:
+        print(f"FALLBACK unsupported image type {path.suffix}: open it directly.")
+        return 2
+    data = path.read_bytes()
+    if len(data) > 15 * 1024 * 1024:
+        print("FALLBACK image larger than 15 MB: resize it first or open it directly.")
+        return 2
+    trusted = [c for c in cfgs if is_trusted(c)]
+    if not trusted:
+        print("BLOCKED images go only to trusted providers (default: gemini, local ollama). "
+              "Add a Gemini key: set_key.py gemini")
+        return 2
+    content = [{"type": "text", "text": IMAGE_PROMPT},
+               {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{base64.b64encode(data).decode()}"}}]
+    for cfg in trusted:
+        privacy_guard.audit(cfg.base_url, cfg.model, f"<image {len(data)} bytes>", "describe")
+        text, status = call_chat(cfg, "You transcribe and describe images exactly.", content)
+        if text:
+            print(f"DESCRIBED by {cfg.model} (UNTRUSTED for exact values - open the image if a number matters):")
+            print(text.strip())
+            return 0
+        if not status.startswith(_ROTATE):
+            break
+    print(f"FALLBACK {status}: open the image directly.")
+    return 2
+
+
+def cmd_review(cfgs: list[ScoutConfig] | ScoutConfig, text: str, swarm: int = 3,
+               original: str | None = None, mapping: dict[str, str] | None = None,
+               trusted_text: str | None = None) -> int:
     """
     Swarm review: up to `swarm` different free models review the same code independently.
     Layer 1: every finding must quote a real line (hallucinated quotes dropped).
@@ -241,12 +303,14 @@ def cmd_review(cfgs: list[ScoutConfig] | ScoutConfig, text: str, swarm: int = 3)
     Layer 3 (caller): Claude verifies each reported line in the real code before acting.
     """
     cfgs = [cfgs] if isinstance(cfgs, ScoutConfig) else cfgs
-    chunks = chunk_lines(text)
+    chunks = chunk_lines(text)                       # masked: for untrusted providers
+    chunks_trusted = chunk_lines(trusted_text) if trusted_text is not None else chunks
 
     def member(cfg: ScoutConfig) -> tuple[list[tuple[int, str, str]], int] | None:
         findings: list[tuple[int, str, str]] = []
         dropped_here = 0
-        for first_line, chunk in chunks:
+        own_chunks = chunks_trusted if is_trusted(cfg) else chunks  # same line numbers in both
+        for first_line, chunk in own_chunks:
             content, status = chat_rotating([cfg], REVIEW_PROMPT, f"CODE:\n{chunk}")
             kept, d, vstatus = verify_review(content, chunk, first_line) if content else ([], 0, status)
             if vstatus != "OK":
@@ -291,7 +355,12 @@ def cmd_review(cfgs: list[ScoutConfig] | ScoutConfig, text: str, swarm: int = 3)
     trust = "consensus" if min_votes == 2 else "SINGLE MODEL - low confidence"
     print(f"REVIEW swarm={len(per_model)} ({', '.join(used)}) | {trust} | {len(agreed)} line(s) | "
           f"{dropped} hallucinated dropped. UNTRUSTED - verify each in the code:")
+    real_lines = original.split("\n") if original is not None else None
     for line_no, n, issue, quote in agreed:
+        if mapping:  # restore real names locally; the provider only ever saw v1/v2/"S1"
+            issue = privacy_guard.unmask(issue, mapping)
+        if real_lines and 0 < line_no <= len(real_lines):
+            quote = real_lines[line_no - 1].strip()[:80]
         print(f"L{line_no} [{n}/{len(per_model)}]: {issue} | {quote}")
     return 0
 
@@ -301,13 +370,15 @@ def main(argv: list[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
     ap = argparse.ArgumentParser(description="Radon 1 free-model worker (verified output only)")
-    ap.add_argument("cmd", choices=["ping", "extract", "review", "models"])
+    ap.add_argument("cmd", choices=["ping", "extract", "review", "describe", "models"])
     ap.add_argument("--provider", choices=sorted(PRESETS), help="preset base URL (env RADON_SCOUT_BASE_URL wins)")
     ap.add_argument("--model", help="model id (else env RADON_SCOUT_MODEL)")
     ap.add_argument("--file", type=Path, help="input file (else stdin)")
     ap.add_argument("--hint", default="the most relevant facts", help="what to extract")
     ap.add_argument("--swarm", type=int, default=3, help="review: number of independent models that vote")
     ap.add_argument("--private", action="store_true", help="local Ollama only - nothing leaves this PC")
+    ap.add_argument("--no-mask", action="store_true", help="review: send real names/strings (default: masked)")
+    ap.add_argument("--allow-cloud", action="store_true", help="extract: allow sending document text to a cloud model")
     args = ap.parse_args(argv)
 
     if args.private:
@@ -328,6 +399,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.cmd == "ping":
         return cmd_ping(cfgs)
+    if args.cmd == "describe":
+        if args.file is None:
+            print("Error: describe needs --file <image>", file=sys.stderr)
+            return 1
+        vision = build_configs(args.provider, args.model, model_var="RADON_VISION_MODEL") or cfgs
+        return cmd_describe(vision, args.file)
     try:
         text = args.file.read_text(encoding="utf-8-sig", errors="replace") if args.file else sys.stdin.read()
     except OSError as exc:
@@ -336,14 +413,39 @@ def main(argv: list[str] | None = None) -> int:
     if not text.strip():
         print("FALLBACK SCOUT_SKIPPED_EMPTY")
         return 2
-    is_local = all("localhost" in c.base_url or "127.0.0.1" in c.base_url for c in cfgs)
-    if not is_local:
+    original, mapping = text, {}
+    trusted_cfgs = [c for c in cfgs if is_trusted(c)]
+    untrusted = [c for c in cfgs if not is_trusted(c)]
+    if args.cmd == "extract":
+        # Documents go only to trusted providers; untrusted ones need explicit --allow-cloud.
+        if untrusted and not args.allow_cloud:
+            cfgs = trusted_cfgs
+            if not cfgs:
+                print("BLOCKED document text stays on this PC (no trusted provider available). Use --private "
+                      "(local Ollama), a Gemini key, or convert locally (pymupdf4llm / markitdown) and search "
+                      "with rg - 0 tokens, nothing leaves. --allow-cloud only for non-confidential text.")
+                return 2
+            print(f"TRUST: document sent only to trusted providers ({len(cfgs)} model(s)); "
+                  f"{len(untrusted)} untrusted skipped.")
         text, counts = privacy_guard.redact(text)
         if counts:
             print("REDACTED before sending: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
-    if args.cmd == "extract":
         return cmd_extract(cfgs, text, args.hint)
-    return cmd_review(cfgs, text, swarm=max(1, args.swarm))
+    # review: trusted providers get real code (secrets redacted); untrusted ones get masked code only
+    trusted_text, counts = privacy_guard.redact(text)
+    if untrusted and not args.no_mask:
+        masked, mapping, level = privacy_guard.mask_code(text, str(args.file or ""))
+        text, _ = privacy_guard.redact(masked)
+        hidden = sum(1 for k in mapping if k.startswith("v")), sum(1 for k in mapping if k.startswith('"S'))
+        print(f"MASKED for {len(untrusted)} untrusted model(s) ({level}): {hidden[0]} names -> v1.., "
+              f"{hidden[1]} strings -> \"S1\".., comments removed. Trusted models ({len(trusted_cfgs)}) get the "
+              "real code. The mapping stays on this PC.")
+    else:
+        text = trusted_text
+    if counts:
+        print("REDACTED before sending: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    return cmd_review(cfgs, text, swarm=max(1, args.swarm), original=original, mapping=mapping,
+                      trusted_text=trusted_text)
 
 
 if __name__ == "__main__":

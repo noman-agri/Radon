@@ -23,11 +23,24 @@ Layers 1-2 make the *output* hallucination-free; layers 3-5 filter wrong *judgem
 
 ## Data protection (what may leave this PC)
 
+**Trust tiers (set in the toolkit's `models.env`, default `gemini,ollama`):**
+
+| Provider | Code review | Documents | Images |
+| --- | --- | --- | --- |
+| Trusted (Gemini, local Ollama) | real code, secrets redacted | allowed | allowed (`describe`) |
+| Untrusted (OpenRouter, xAI, any other) | masked code only | blocked | blocked |
+
+In one swarm, trusted members review the real code and untrusted members the masked copy; line numbers are identical, so votes still combine.
+
+**Images save Claude tokens:** `free_llm.py describe --file shot.png` sends the image to a trusted vision model and returns text (verbatim text, tables, chart values; unreadable parts marked `[?]`). Claude reads that text instead of the image. Exact numbers that matter must be checked in the image itself.
+
 - **Blocked outright:** `.env*`, key/credential/token/password files, `.pem/.key`, `auth.json`, raw data files (`.csv .parquet .xlsx .db .pkl ...`) -> `BLOCKED`, handle locally.
+- **Code is masked before review (default):** every name you wrote becomes `v1`, `v2`..., every string becomes `"S1"`..., comments are removed; only library names (`np.mean`) and structure stay. The provider sees meaningless structure; the mapping stays on this PC and real names are restored locally in the result. Full masking for Python, strings and comments for other languages. `--no-mask` turns it off.
+- **Documents never leave by default:** `extract` to a cloud model is blocked unless `--allow-cloud`. Default path: convert locally (`pymupdf4llm` / `markitdown`) and search with `rg` - 0 tokens, 0 bytes sent.
 - **Redacted before sending (line structure kept):** access keys, private keys, values of password or secret settings, emails, IPs, long numbers (phone/card/ID), user names in paths. The CLI prints what it redacted.
 - **Audit log:** every outbound call appends time, host, model, size and a sha256 to `~/.radon/audit.log` - never the content. Check it any time.
 - **`--private`:** Ollama on localhost only; nothing leaves the machine. Use it for client code, personal data, anything confidential.
-- Redaction catches common patterns, not everything: confidential business logic is still readable code. When in doubt use `--private` or skip the free model.
+- Masking hides meaning, not logic: an algorithm's structure is still visible. For code whose structure itself is secret, use `--private` (local Ollama) or skip the free model.
 
 Rules:
 - A 7B-class model cannot reliably judge Claude's reasoning. It is a cheap filter, not a judge. Deterministic checks always run first.

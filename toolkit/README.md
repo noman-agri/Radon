@@ -21,6 +21,7 @@ python ~/.radon/toolkit/scripts/free_llm.py ping
 python ~/.radon/toolkit/scripts/free_llm.py extract --file build.log --hint "root cause"
 python ~/.radon/toolkit/scripts/free_llm.py review --file src/app.py
 python ~/.radon/toolkit/scripts/free_llm.py review --file src/app.py --private   # local Ollama only
+python ~/.radon/toolkit/scripts/free_llm.py describe --file screenshot.png         # image -> text (trusted only)
 ```
 
 Models and provider order: `models.env` (non-secret). Audit log: `~/.radon/audit.log` (metadata only). Tests: `python -m unittest discover -s ~/.radon/toolkit/tests`.

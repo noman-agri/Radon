@@ -18,6 +18,7 @@ FORMATS = {
     "openrouter": r"sk-or-v1-[0-9a-f]{64}",
     "gemini": r"(AIza[0-9A-Za-z_-]{35}|AQ\.[A-Za-z0-9_.-]{20,})",
     "groq": r"gsk_[A-Za-z0-9]{40,}",
+    "xai": r"xai-[A-Za-z0-9]{20,}",
 }
 
 

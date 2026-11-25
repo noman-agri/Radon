@@ -392,6 +392,113 @@ class SwarmAndPrivacyTests(unittest.TestCase):
         self.assertIn("x = 1", red)
         self.assertGreaterEqual(len(counts), 4)
 
+    SECRET_CODE = (
+        "import numpy as np\n"
+        "CLIENT_NAME = 'Acme Bank Ltd'  # confidential client\n"
+        "def compute_bonus(salary_table, employee_id):\n"
+        '    """Internal payroll rule."""\n'
+        "    rate = salary_table[employee_id + 1]\n"
+        "    return np.mean(rate) / len(salary_table)\n"
+    )
+
+    def test_mask_hides_names_strings_comments_keeps_lines(self):
+        masked, mapping, level = pg.mask_code(self.SECRET_CODE, "pay.py")
+        self.assertEqual(level, "full")
+        self.assertEqual(masked.count("\n"), self.SECRET_CODE.count("\n"))
+        for leaked in ("Acme", "CLIENT_NAME", "compute_bonus", "salary_table", "employee_id",
+                       "payroll", "confidential", "rate"):
+            self.assertNotIn(leaked, masked, leaked)
+        self.assertIn("np.mean", masked)          # imported library kept: API use stays reviewable
+        self.assertIn("return", masked)           # keywords and structure kept
+        compile(masked, "<masked>", "exec")       # still valid Python
+        self.assertEqual(mapping["v1"], "CLIENT_NAME")
+
+    def test_masked_review_restores_real_names_locally(self):
+        masked, mapping, _ = pg.mask_code(self.SECRET_CODE, "pay.py")
+        inv = {v: k for k, v in mapping.items()}
+        bad_line = masked.split("\n")[4].strip()   # e.g. "v6 = v4[v5 + 1]"
+        issue = f"{inv['employee_id']} + 1 is off by one on {inv['salary_table']}"
+        reply = _chat(json.dumps({"findings": [{"quote": bad_line, "issue": issue}]}))
+        cfgs = [fs.ScoutConfig("https://example.invalid", "a", "K")]
+        sent = []
+
+        def fake(req, timeout=0):
+            sent.append(req.data.decode())
+            return _Resp(reply)
+
+        buf = io.StringIO()
+        with mock.patch.object(fs.urllib.request, "urlopen", side_effect=fake), redirect_stdout(buf):
+            fl.cmd_review(cfgs, masked, original=self.SECRET_CODE, mapping=mapping)
+        self.assertNotIn("salary_table", "".join(sent))                       # provider never saw it
+        self.assertIn("employee_id + 1 is off by one on salary_table", buf.getvalue())  # user sees real names
+        self.assertIn("rate = salary_table[employee_id + 1]", buf.getvalue())
+
+    def test_trusted_gets_real_code_untrusted_gets_masked(self):
+        env = {"RADON_KEY_OPENROUTER": "k1", "RADON_KEY_GEMINI": "k2", "RADON_SCOUT_PROVIDER": "openrouter",
+               "RADON_SCOUT_REVIEW_MODEL": "gemini:g-flash,openrouter:x/y:free",
+               "RADON_TRUSTED_PROVIDERS": "gemini"}
+        seen: dict[str, str] = {}
+
+        def fake(req, timeout=0):
+            body = json.loads(req.data)
+            seen[body["model"]] = body["messages"][1]["content"]
+            return _Resp(_chat('{"findings": []}'))
+
+        with tempfile.TemporaryDirectory() as d:
+            src = Path(d) / "pay.py"
+            src.write_text(self.SECRET_CODE, encoding="utf-8")
+            with mock.patch.dict(fl.os.environ, env, clear=True), \
+                    mock.patch.object(fl, "SKILL_DOTENV", Path("__none__")), \
+                    mock.patch.object(fl, "SECRETS", Path("__none__")), \
+                    mock.patch.object(fl, "SKILL_MODELS", Path("__none__")), \
+                    mock.patch.object(fs.urllib.request, "urlopen", side_effect=fake), \
+                    redirect_stdout(io.StringIO()):
+                fl.main(["review", "--file", str(src)])
+        self.assertIn("salary_table", seen["g-flash"])        # trusted Gemini: real code
+        self.assertNotIn("salary_table", seen["x/y:free"])     # untrusted: masked
+        self.assertNotIn("Acme", seen["x/y:free"])
+
+    def test_images_only_to_trusted_providers(self):
+        with tempfile.TemporaryDirectory() as d:
+            img = Path(d) / "shot.png"
+            img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 64)
+            untrusted = [fs.ScoutConfig("https://openrouter.ai/api/v1", "x", "K")]
+            buf = io.StringIO()
+            with mock.patch.dict(fl.os.environ, {"RADON_TRUSTED_PROVIDERS": "gemini"}), \
+                    mock.patch.object(fs.urllib.request, "urlopen") as net, redirect_stdout(buf):
+                self.assertEqual(fl.cmd_describe(untrusted, img), 2)
+            net.assert_not_called()
+            self.assertIn("BLOCKED", buf.getvalue())
+            gem = [fs.ScoutConfig(fl.PRESETS["gemini"], "g", "K")]
+            sent = []
+
+            def fake(req, timeout=0):
+                sent.append(json.loads(req.data))
+                return _Resp(_chat("A chart titled Sales; values 3, 5, 8."))
+
+            buf = io.StringIO()
+            with mock.patch.dict(fl.os.environ, {"RADON_TRUSTED_PROVIDERS": "gemini"}), \
+                    mock.patch.object(fs.urllib.request, "urlopen", side_effect=fake), redirect_stdout(buf):
+                self.assertEqual(fl.cmd_describe(gem, img), 0)
+        parts = sent[0]["messages"][1]["content"]
+        self.assertTrue(parts[1]["image_url"]["url"].startswith("data:image/png;base64,"))
+        self.assertIn("Sales", buf.getvalue())
+
+    def test_extract_to_cloud_blocked_without_permission(self):
+        env = {"RADON_KEY_OPENROUTER": "k", "RADON_SCOUT_PROVIDER": "openrouter", "RADON_SCOUT_MODEL": "a:free"}
+        with tempfile.TemporaryDirectory() as d:
+            doc = Path(d) / "report.md"
+            doc.write_text("Quarterly revenue was 4.2M.", encoding="utf-8")
+            buf = io.StringIO()
+            with mock.patch.dict(fl.os.environ, env, clear=True), \
+                    mock.patch.object(fl, "SKILL_DOTENV", Path("__none__")), \
+                    mock.patch.object(fl, "SECRETS", Path("__none__")), \
+                    mock.patch.object(fl, "SKILL_MODELS", Path("__none__")), \
+                    mock.patch.object(fs.urllib.request, "urlopen") as net, redirect_stdout(buf):
+                self.assertEqual(fl.main(["extract", "--file", str(doc)]), 2)
+            net.assert_not_called()
+        self.assertIn("BLOCKED document text stays on this PC", buf.getvalue())
+
     def test_redaction_never_breaks_code_expressions(self):
         code = ("cfgs.append(ScoutConfig(base_url=u, model=m, api_key=key))\n"
                 "token = tokenizer(text)\nhost = '127.0.0.1'\n")

@@ -90,3 +90,90 @@ def audit(provider_url: str, model: str, payload: str, purpose: str) -> None:
             fh.write(line)
     except OSError:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Code masking: send the STRUCTURE of code, not its meaning.
+# Identifiers -> v1, v2 ...; string literals -> "S1" ...; comments removed.
+# Line numbers are preserved so findings map back exactly; the mapping never leaves this PC.
+# ---------------------------------------------------------------------------
+import builtins as _builtins
+import io as _io
+import keyword as _keyword
+import tokenize as _tokenize
+
+_KEEP = set(_keyword.kwlist) | set(getattr(_keyword, "softkwlist", [])) | set(dir(_builtins)) | {"self", "cls"}
+
+
+def mask_python(code: str) -> tuple[str, dict[str, str]]:
+    """Mask a Python source. Returns (masked_code, {mask: original}). Raises ValueError if not tokenizable."""
+    lines = code.splitlines(keepends=True)
+    try:
+        toks = list(_tokenize.generate_tokens(_io.StringIO(code).readline))
+    except (_tokenize.TokenError, IndentationError, SyntaxError) as exc:
+        raise ValueError(f"not valid Python: {exc}") from exc
+    imported: set[str] = set()
+    starts = (_tokenize.NEWLINE, _tokenize.NL, _tokenize.INDENT, _tokenize.DEDENT)
+    for i, t in enumerate(toks):  # keep library names, aliases and imported symbols (needed to judge API use)
+        if t.type == _tokenize.NAME and t.string in ("import", "from") and (i == 0 or toks[i - 1].type in starts):
+            j = i + 1
+            while j < len(toks) and toks[j].type not in (_tokenize.NEWLINE, _tokenize.ENDMARKER):
+                if toks[j].type == _tokenize.NAME and toks[j].string not in _KEEP:
+                    imported.add(toks[j].string)
+                j += 1
+    names: dict[str, str] = {}
+    strings: dict[str, str] = {}
+    reverse: dict[str, str] = {}
+    edits = []
+    for k, t in enumerate(toks):
+        lib_attr = k >= 2 and toks[k - 1].string == "." and toks[k - 2].string in imported  # e.g. np.mean
+        if t.type == _tokenize.NAME and t.string not in _KEEP and t.string not in imported and not lib_attr:
+            new = names.setdefault(t.string, f"v{len(names) + 1}")
+        elif t.type == _tokenize.STRING:
+            key = strings.setdefault(t.string, f'"S{len(strings) + 1}"')
+            new = key + "\n" * (t.end[0] - t.start[0])  # keep line count for multi-line strings
+        elif t.type == _tokenize.COMMENT:
+            new = ""
+        else:
+            continue
+        reverse[new.strip()] = t.string if t.type != _tokenize.STRING else "<string>"
+        edits.append((t.start, t.end, new))
+    for (sr, sc), (er, ec), new in reversed(edits):  # apply from the end so positions stay valid
+        head = lines[sr - 1][:sc]
+        tail = lines[er - 1][ec:]
+        if "\n" in new:  # multi-line string: first line gets the mask, blank lines keep numbering
+            first, rest = new.split("\n", 1)
+            lines[sr - 1:er] = [head + first + "\n"] + ["\n"] * (er - sr - 1) + [tail]
+        else:
+            lines[sr - 1:er] = [head + new + tail]
+    return "".join(lines), {k: v for k, v in reverse.items() if k}
+
+
+def mask_generic(code: str) -> tuple[str, dict[str, str]]:
+    """Non-Python fallback: hide string literals and comments (identifiers stay). Line count preserved."""
+    mapping: dict[str, str] = {}
+    def s_repl(m: re.Match[str]) -> str:
+        key = f'"S{len(mapping) + 1}"'
+        mapping[key] = "<string>"
+        return key
+    out = re.sub(r"/\*[\s\S]*?\*/", lambda m: "\n" * m.group(0).count("\n"), code)
+    out = re.sub(r"(?m)(^|\s)(//|#).*$", r"\1", out)
+    out = re.sub(r"\"(?:\.|[^\"\\n])*\"|'(?:\.|[^'\\n])*'|`(?:\.|[^`\])*`", s_repl, out)
+    return out, mapping
+
+
+def mask_code(code: str, filename: str = "") -> tuple[str, dict[str, str], str]:
+    """Best available masking. Returns (masked, mapping, level) with level 'full' or 'partial'."""
+    if filename.endswith(".py") or not filename:
+        try:
+            masked, mapping = mask_python(code)
+            return masked, mapping, "full"
+        except ValueError:
+            pass
+    masked, mapping = mask_generic(code)
+    return masked, mapping, "partial"
+
+
+def unmask(text: str, mapping: dict[str, str]) -> str:
+    """Restore real names in model output (only identifiers; strings stay hidden as <string>)."""
+    return re.sub(r"\bv\d+\b|\"S\d+\"", lambda m: mapping.get(m.group(0), m.group(0)), text)

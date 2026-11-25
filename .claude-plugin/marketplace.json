@@ -6,7 +6,7 @@
       "name": "radon-1",
       "source": "./plugin",
       "description": "Token-lean, maximum-reasoning protocol with a verified free-LLM swarm (/orch).",
-      "version": "1.4.0"
+      "version": "1.5.0"
     }
   ]
 }
