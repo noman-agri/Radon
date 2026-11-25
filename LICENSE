@@ -1,0 +1,19 @@
+Copyright (c) 2026 noman-agri. All Rights Reserved.
+
+This repository and all of its contents (including SKILL.md, the reference documents,
+domain primers, scripts, tests, and configuration) are proprietary.
+
+No license is granted. Without prior written permission from the copyright holder, you may NOT:
+  - copy, reproduce, or redistribute this work, in whole or in part;
+  - modify, adapt, translate, or create derivative works, including customized or
+    renamed versions of this skill or its protocols;
+  - use this work, or any part of it, in any product, service, skill, plugin, or agent;
+  - sublicense, sell, or publish it anywhere else.
+
+The source is publicly visible only so it can be viewed. Viewing and the forking functions
+provided by GitHub under its Terms of Service do not grant any of the rights listed above.
+
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE WORK OR ITS USE.
+
+Permission requests: open an issue at https://github.com/noman-agri/Radon

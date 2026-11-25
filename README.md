@@ -10,10 +10,15 @@ A token-lean, maximum-reasoning work protocol (skill) for Claude Code, with an o
 - **Anti-hallucination layers**: verbatim-quote verification, quote-anchored findings, multi-model swarm voting (>= 2 must agree), final verification by Claude, deterministic tests on top.
 - **Data protection**: blocks sensitive files (`.env`, keys, credentials, raw data), redacts secrets / emails / IPs before sending, metadata-only audit log, `--private` mode (local Ollama only).
 
-## Install
+## License
+
+**Proprietary - All Rights Reserved.** The source is visible for viewing only. Copying, modifying,
+redistributing, or building customized versions of this skill requires written permission.
+See [LICENSE](LICENSE).
+
+## Install (owner / permitted users)
 
 ```bash
-# copy this folder to your Claude Code skills directory
 git clone https://github.com/noman-agri/Radon.git ~/.claude/skills/radon-1
 ```
 
