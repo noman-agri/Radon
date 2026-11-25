@@ -22,3 +22,29 @@
 - "Works on my machine": unpinned dependencies, missing env vars.
 
 **Verification checks:** tests pass, linter clean, the original reproduction now succeeds, and nothing unrelated changed in the diff.
+
+**Standard flowchart (build)**
+
+```mermaid
+flowchart TD
+  A[Define done as a runnable check] --> B[Read conventions<br/>one similar file, tests, build cmd]
+  B --> C[Smallest end-to-end slice]
+  C --> D[Test for each behaviour change]
+  D --> E{Check: tests + lint pass?}
+  E -- fail --> C
+  E -- pass --> F[Extend slice by slice]
+  F --> G[Final check + review diff]
+```
+
+**Standard flowchart (debug)**
+
+```mermaid
+flowchart TD
+  A[Reproduce with smallest input] --> B[Capture exact error + trace]
+  B --> C[One hypothesis + one falsifying check]
+  C --> D{Confirmed?}
+  D -- no --> C
+  D -- yes --> E[Fix root cause]
+  E --> F[Regression test that failed before]
+  F --> G[Search same pattern elsewhere]
+```

@@ -24,3 +24,18 @@
 - CV std across folds reported, not just the mean.
 
 **Minimal tools:** pandas/polars, scikit-learn (Pipeline, StratifiedKFold/GroupKFold/TimeSeriesSplit), LightGBM, matplotlib.
+
+**Standard flowchart** (adapt labels to the user's data and target)
+
+```mermaid
+flowchart TD
+  A[Goal + metric<br/>what to predict, how judged] --> B[Inspect raw data<br/>shape, target balance, missing]
+  B --> C[Split FIRST<br/>train / valid / test, grouped or by time]
+  C --> D[Baseline model<br/>simple, honest reference]
+  D --> E[Features inside CV<br/>fit only on train folds]
+  E --> F[Strong model<br/>gradient boosting + early stopping]
+  F --> G{Check: leakage? overfit?<br/>shuffled-target, CV gap}
+  G -- problem --> E
+  G -- ok --> H[Final fit + ONE test evaluation]
+  H --> I[Save model, preprocessing, seed]
+```

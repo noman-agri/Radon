@@ -24,3 +24,17 @@
 - Spot-check 3 raw records end to end.
 
 **Minimal tools:** DuckDB (SQL on CSV/Parquet), pandas/polars, matplotlib.
+
+**Standard flowchart**
+
+```mermaid
+flowchart TD
+  A[Question + decision it informs] --> B[Define KPIs exactly<br/>numerator, denominator, window]
+  B --> C[Profile data<br/>grain, dates, nulls, duplicates]
+  C --> D[Clean with logged rules<br/>count rows removed]
+  D --> E[Aggregate + compare to baseline]
+  E --> F{Check: totals reconcile?<br/>joins double-count? segments flip?}
+  F -- problem --> D
+  F -- ok --> G[Charts: one message each]
+  G --> H[Answer + confidence + caveats]
+```
