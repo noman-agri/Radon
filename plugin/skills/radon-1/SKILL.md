@@ -34,11 +34,11 @@ Trigger: a multi-step task in a domain (ML, data analysis, web, security, financ
 
 1. Search before reading: `rg -n` / Grep, then read only the needed line range. Never open whole large files, `.venv`, `node_modules`, data dumps.
 2. Edit with minimal hunks; never rewrite a whole file for a small change; don't re-read after editing.
-3. Filter command output: `-q`, `| tail -20`, shapes/summary stats instead of full dataframes or logs.
+3. Map -> Locate -> Zoom -> Verify: summary first (`--stat`, `-q`, `--oneline`, `rg -l`, symbol map, `df.shape`), then read only the exact range in full. Measured 75-97% fewer tokens with no information lost. Recipes: `references/token-playbook.md`.
 4. No subagents or parallel agents unless the user asks - each one re-reads the whole context.
 5. Batch independent tool calls in one message.
 6. Replies <= 300 words; no recap of what the user already saw; code and required tables exempt.
-7. Large text (logs > 200 lines, PDFs, long docs): local tools first (`rg`, `duckdb`, `markitdown`), or `free_llm.py extract` in ORCH mode; read only the verified extract.
+7. Documents and large text (PDF, DOCX, PPTX, XLSX, scans, logs > 200 lines): convert locally to Markdown first (`pymupdf4llm`, `markitdown`, `docling`, OCR for scans), quality-check the conversion, then search and read only the needed sections. In ORCH mode the toolkit's `extract` can pull verified quotes. Details: `references/token-playbook.md`.
 8. Tell the user when to `/clear` (new unrelated task) or `/compact` (long session), and when a cheaper model or lower effort is enough for routine edits.
 
 ## Output
@@ -49,6 +49,7 @@ Bangla prose with exact English technical terms (unless the user asks otherwise)
 
 All paths below are relative to this skill's base directory.
 
+- `references/token-playbook.md` - measured command recipes and the document-to-Markdown pipeline (read once per session when doing heavy tool work).
 - `references/orchestrator.md` - ORCH mode protocol, free model providers and links, CLI usage.
 - `references/primers/` - domain knowledge primers (ml, data-analysis, software).
 - `references/cascade-and-benchmark.md` - API effort cascade router and A/B cost measurement (only when building on the API).
