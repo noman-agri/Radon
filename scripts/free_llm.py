@@ -336,13 +336,17 @@ def main(argv: list[str] | None = None) -> int:
     if not text.strip():
         print("FALLBACK SCOUT_SKIPPED_EMPTY")
         return 2
+    hint = args.hint
     is_local = all("localhost" in c.base_url or "127.0.0.1" in c.base_url for c in cfgs)
     if not is_local:
         text, counts = privacy_guard.redact(text)
+        hint, hint_counts = privacy_guard.redact(args.hint)
+        for label, count in hint_counts.items():
+            counts[label] = counts.get(label, 0) + count
         if counts:
             print("REDACTED before sending: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
     if args.cmd == "extract":
-        return cmd_extract(cfgs, text, args.hint)
+        return cmd_extract(cfgs, text, hint)
     return cmd_review(cfgs, text, swarm=max(1, args.swarm))
 
 
