@@ -23,6 +23,10 @@ Trigger: a new multi-step task in a domain (ML, data analysis, web app, security
 5. **Build step by step along the flowchart**, naming the current box each time ("Step 3/7: leakage-free split"). If the plan must change, update the flowchart and say why.
 6. If the user says they know the domain: skip step 2, keep the flowchart (it is the shared plan), never re-explain later.
 
+## Ask before optional tools
+
+Before using anything beyond the normal workflow, ask once in one line and wait: the free-model toolkit (`/orch`), installing a converter (`pymupdf4llm`, `markitdown`, `docling`, OCR), or any step that sends data off this machine. Say what it does and what it saves, e.g. "This 80-page PDF: convert locally with pymupdf4llm (~1 min install) to read only the relevant pages? Yes/No". Remember the answer for the session; if "No", do the work without it and never ask again for that tool. Typing `/orch` is consent for the toolkit, not for sending confidential files.
+
 ## Anti-Hallucination Protocol (always on)
 
 Every factual statement must come from evidence seen in this session, or be marked as not verified. In detail: `references/anti-hallucination.md`.
@@ -42,6 +46,17 @@ Every factual statement must come from evidence seen in this session, or be mark
 3. Choose the simplest approach that passes the check; no speculative abstractions.
 4. Run one falsification pass before delivering: worst bug, data leakage, edge case, wrong unit.
 5. Missing or ambiguous input that changes the result -> ask, don't guess.
+
+## Same Quality, Fewer Tokens (how the bill actually works)
+
+Every turn re-sends the whole conversation, output costs ~5x input, and thinking is billed as output. So the cheapest quality-neutral savings are:
+
+1. **Fewer turns:** gather all questions into one message; plan once, then execute without check-ins the user didn't ask for. Each avoided turn saves the entire context once.
+2. **Shorter context:** keep big outputs out (Map/Locate/Zoom); suggest `/clear` between unrelated tasks and `/compact` with a focus in long sessions - later turns get cheaper with no loss on the current task.
+3. **Shorter output, same content:** answer first, diffs not whole files, no restating, no duplicate tables. Content and correctness stay identical.
+4. **Keep the prompt cache warm:** don't edit CLAUDE.md, skills, or the model mid-session, and don't flip effort back and forth - each change can invalidate the cached prefix and make the next turns cost full price.
+5. **Right effort for the task, chosen per session:** hard reasoning, architecture, debugging -> high; routine edits, renames, formatting -> lower effort is usually enough. Suggest this to the user; never silently lower quality on a hard task.
+6. **Do it right once:** the most expensive tokens are a redo. Verification (quality floor) is never cut to save tokens.
 
 ## Token Rules (hard)
 
