@@ -1,0 +1,5 @@
+# Never publish secrets. The real key lives in ~/.radon/secrets.env (outside this folder).
+.env
+*.env.local
+secrets.env
+__pycache__/

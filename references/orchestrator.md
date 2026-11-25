@@ -1,0 +1,78 @@
+# ORCH Mode - Claude Orchestrates, Free Models Do Cheap Work
+
+## Division of labour (why this saves tokens without losing quality)
+
+| Role | Who | Does |
+| --- | --- | --- |
+| Orchestrator + final judge | Claude | plan, hard reasoning, writing code, deciding what is true |
+| Checker 1 (free, exact) | local tools | tests, `python -m py_compile`, `ruff`, type checks, schema checks, `rg` |
+| Checker 2 (free, fuzzy) | free/local model via `free_llm.py review` | second-opinion bug hunt; findings are UNTRUSTED candidates |
+| Worker | free/local model via `free_llm.py extract` | pull relevant lines out of big logs/docs so Claude reads 5% instead of 100% |
+
+## Anti-hallucination layers (free models hallucinate a lot - nothing they say is used unchecked)
+
+| Layer | Where | Guarantee |
+| --- | --- | --- |
+| 1. Extractive contract + verbatim check | `extract` | every returned quote is an exact substring of the source: hallucinated text is impossible in the output |
+| 2. Quote-anchored findings | `review` | each finding must quote a real line; invented lines are dropped and counted |
+| 3. Swarm voting | `review --swarm 3` | up to 3 different models review independently; a line is reported only if >= 2 agree. One answering model = marked "SINGLE MODEL - low confidence" |
+| 4. Claude verification | orchestrator | Claude reads each reported line in the real code and accepts only what it confirms |
+| 5. Deterministic checks | tests / lint / compile | ground truth; always outrank any model opinion |
+
+Layers 1-2 make the *output* hallucination-free; layers 3-5 filter wrong *judgements*. Zero wrong judgements cannot be guaranteed by any model, which is why layer 4-5 always run.
+
+## Data protection (what may leave this PC)
+
+- **Blocked outright:** `.env*`, key/credential/token/password files, `.pem/.key`, `auth.json`, raw data files (`.csv .parquet .xlsx .db .pkl ...`) -> `BLOCKED`, handle locally.
+- **Redacted before sending (line structure kept):** API keys, private keys, `password=/token=` values, emails, IPs, long numbers (phone/card/ID), user names in paths. The CLI prints what it redacted.
+- **Audit log:** every outbound call appends time, host, model, size and a sha256 to `~/.radon/audit.log` - never the content. Check it any time.
+- **`--private`:** Ollama on localhost only; nothing leaves the machine. Use it for client code, personal data, anything confidential.
+- Redaction catches common patterns, not everything: confidential business logic is still readable code. When in doubt use `--private` or skip the free model.
+
+Rules:
+- A 7B-class model cannot reliably judge Claude's reasoning. It is a cheap filter, not a judge. Deterministic checks always run first.
+- Never send secrets, personal data, or confidential code to a cloud free tier (they may log or train).
+- Claude reads only the CLI's verified output, then checks each review finding against the code itself before acting on it.
+- If the CLI prints `FALLBACK` (exit code 2), do the step yourself; do not retry in a loop.
+
+## Loop
+
+1. Plan (<= 5 lines) and pick the success check.
+2. Large input? `python scripts/free_llm.py extract --provider P --file F --hint "<what you need>"` -> read the quotes only.
+3. Write or change code.
+4. Run deterministic checks; fix failures.
+5. Optional for risky code: `python scripts/free_llm.py review --provider P --file F` -> verify each `L<n>` candidate, fix only the real ones.
+6. Report briefly with what was actually run.
+
+Run scripts with the skill's path, e.g. `python ~/.claude/skills/radon-1/scripts/free_llm.py ...`. Test the setup once with `ping`.
+
+## Setup
+
+- **Key:** run `python scripts/set_key.py` and paste it once. It is stored in `~/.radon/secrets.env`, OUTSIDE the skill folder, so sharing, zipping, or publishing the skill never includes it. Never paste keys into chat or code. On OpenRouter, give the key a $0 credit limit so a leaked key cannot spend money.
+- **Models / provider (non-secret, shareable):** `<skill folder>/models.env`:
+
+```env
+RADON_SCOUT_PROVIDER=openrouter
+RADON_SCOUT_MODEL=<model>,<fallback model>,...      # tried in order on rate limit / removal
+RADON_SCOUT_REVIEW_MODEL=<model>,...                # used by `review`
+```
+
+OpenRouter troubleshooting: `HTTP_404` on every free model usually means the account's privacy settings block free endpoints (https://openrouter.ai/settings/privacy); `HTTP_429` = daily free cap reached, the next model is tried automatically.
+
+## Free providers (`--provider` presets)
+
+Free limits and model lists change often - check the link before relying on them. Live community list: https://github.com/cheahjs/free-llm-api-resources
+
+| Preset | Get key / models | Notes |
+| --- | --- | --- |
+| `ollama` | https://ollama.com/download (models: https://ollama.com/library) | Local, private, unlimited, no key. e.g. `ollama pull qwen2.5-coder:7b`. Needs ~8 GB RAM for 7B. |
+| `groq` | https://console.groq.com/keys | Very fast; Llama / Qwen / GPT-OSS models; per-minute and per-day limits. |
+| `openrouter` | https://openrouter.ai/keys (free models: https://openrouter.ai/models?max_price=0) | Use model ids ending in `:free`; daily request cap. |
+| `gemini` | https://aistudio.google.com/apikey | Gemini Flash models on the free tier; free-tier prompts may be used to improve Google products. |
+| `github` | https://github.com/marketplace/models | GitHub token with `models` scope; model ids like `openai/gpt-4o-mini`. |
+| `cerebras` | https://cloud.cerebras.ai | Fast Llama / Qwen inference, free daily token quota. |
+| `mistral` | https://console.mistral.ai | Free "Experiment" plan; low rate limits. |
+| `nvidia` | https://build.nvidia.com | Free credits / rate-limited trial for many open models. |
+| `hf` | https://huggingface.co/settings/tokens | Hugging Face Inference Providers router; small monthly free credit. |
+
+Good worker models: small coder/instruct models (Qwen2.5-Coder 7B, Llama 3.1 8B) for extract; the largest free model available (e.g. a 70B on Groq/Cerebras) for review.
