@@ -392,6 +392,25 @@ class SwarmAndPrivacyTests(unittest.TestCase):
         self.assertIn("x = 1", red)
         self.assertGreaterEqual(len(counts), 4)
 
+    def test_extract_redacts_hint_before_cloud_send(self):
+        with tempfile.TemporaryDirectory() as d:
+            source = Path(d) / "source.txt"
+            source.write_text("safe source", encoding="utf-8")
+            cfg = fs.ScoutConfig("https://example.invalid", "m", "K")
+            with mock.patch.object(fl, "build_configs", return_value=[cfg]), \
+                    mock.patch.object(fl, "scout_rotating", return_value=(
+                        {"relevant_quotes": ["safe source"]}, "VERIFIED_EXTRACTIVE"
+                    )) as scout, redirect_stdout(io.StringIO()):
+                self.assertEqual(fl.main([
+                    "extract", "--file", str(source),
+                    "--hint", "find alice@example.com at 10.0.0.5",
+                ]), 0)
+        sent_hint = scout.call_args.args[2]
+        self.assertNotIn("alice@example.com", sent_hint)
+        self.assertNotIn("10.0.0.5", sent_hint)
+        self.assertIn("<EMAIL>", sent_hint)
+        self.assertIn("<IP>", sent_hint)
+
     def test_redaction_never_breaks_code_expressions(self):
         code = ("cfgs.append(ScoutConfig(base_url=u, model=m, api_key=key))\n"
                 "token = tokenizer(text)\nhost = '127.0.0.1'\n")
