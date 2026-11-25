@@ -1,17 +1,21 @@
+Radon 1 - Proprietary License
 Copyright (c) 2026 noman-agri. All Rights Reserved.
 
-This repository and all of its contents (including SKILL.md, the reference documents,
-domain primers, scripts, tests, and configuration) are proprietary.
+1. Permitted use. You may install Radon 1 as a Claude Code plugin or skill from the official
+   repository (https://github.com/noman-agri/Radon) and use it, unmodified, for your own work,
+   personal or commercial.
 
-No license is granted. Without prior written permission from the copyright holder, you may NOT:
-  - copy, reproduce, or redistribute this work, in whole or in part;
-  - modify, adapt, translate, or create derivative works, including customized or
-    renamed versions of this skill or its protocols;
-  - use this work, or any part of it, in any product, service, skill, plugin, or agent;
-  - sublicense, sell, or publish it anywhere else.
+2. Not permitted without prior written permission from the copyright holder:
+   - copying, reproducing, or redistributing this work, in whole or in part, outside the
+     official repository;
+   - modifying, adapting, translating, or creating derivative works, including customized,
+     rebranded, or renamed versions of this skill, its protocols, primers, or scripts;
+   - including this work, or any part of it, in another product, service, skill, plugin,
+     marketplace, or agent;
+   - sublicensing or selling it.
 
-The source is publicly visible only so it can be viewed. Viewing and the forking functions
-provided by GitHub under its Terms of Service do not grant any of the rights listed above.
+3. Viewing the source and the forking functions provided by GitHub under its Terms of Service
+   do not grant any of the rights in section 2.
 
 THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. IN NO EVENT SHALL THE COPYRIGHT
 HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM THE WORK OR ITS USE.

@@ -1,0 +1,10 @@
+{
+  "name": "radon-1",
+  "version": "1.1.0",
+  "description": "Token-lean, maximum-reasoning work protocol for Claude Code: knowledge primers, hard token rules with a quality floor, and /orch mode that offloads cheap work to a verified, privacy-guarded swarm of free LLMs.",
+  "author": { "name": "noman-agri", "url": "https://github.com/noman-agri" },
+  "homepage": "https://github.com/noman-agri/Radon",
+  "repository": "https://github.com/noman-agri/Radon",
+  "license": "SEE LICENSE IN LICENSE",
+  "keywords": ["tokens", "reasoning", "orchestrator", "free-llm", "anti-hallucination", "privacy"]
+}

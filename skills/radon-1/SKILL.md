@@ -47,6 +47,8 @@ Bangla prose with exact English technical terms (unless the user asks otherwise)
 
 ## References (load only when needed)
 
+All paths below are relative to this skill's base directory.
+
 - `references/orchestrator.md` - ORCH mode protocol, free model providers and links, CLI usage.
 - `references/primers/` - domain knowledge primers (ml, data-analysis, software).
 - `references/cascade-and-benchmark.md` - API effort cascade router and A/B cost measurement (only when building on the API).

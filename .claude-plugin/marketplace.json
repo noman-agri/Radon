@@ -1,0 +1,12 @@
+{
+  "name": "radon",
+  "owner": { "name": "noman-agri", "url": "https://github.com/noman-agri" },
+  "plugins": [
+    {
+      "name": "radon-1",
+      "source": "./",
+      "description": "Token-lean, maximum-reasoning protocol with a verified free-LLM swarm (/orch).",
+      "version": "1.1.0"
+    }
+  ]
+}
